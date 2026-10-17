@@ -99,4 +99,8 @@ npm test --prefix worker
 
 Os testes de regressão verificam validação de URLs/IDs, argumentos sem shell, isolamento de arquivos e conversão única de áudio. Downloads reais também dependem da disponibilidade e das restrições de cada fonte.
 
+As prévias de vídeos públicos do YouTube usam o endpoint oEmbed do próprio YouTube para obter título e capa. Esse endpoint não informa duração nem formatos disponíveis; a interface indica quando a duração é desconhecida. Uma prévia disponível não garante que o YouTube permita baixar o arquivo. Limites de consultas, exigências de login e vídeos indisponíveis são apresentados com mensagens específicas. A API não lê automaticamente cookies ou sessões do navegador.
+
+A imagem Docker instala `yt-dlp[default]` via pip em ambiente isolado, incluindo o suporte EJS, e usa Node.js como runtime JavaScript. Para atualizar o extrator e suas dependências quando houver uma nova versão, reconstrua com `docker compose -p video-downloader-local -f docker-compose.yml -f docker-compose.local.yml build --no-cache backend` e execute novamente o script de início da API.
+
 Para repetir a integração real (API, PostgreSQL e Redis precisam estar em execução; requer `ffprobe` no PATH): execute `node backend/test/integration.cjs`. O teste baixa uma amostra pública em vídeo e MP3, verifica os codecs e o limite de tarefas. Use `TEST_API_URL` para apontar para outra API de teste.

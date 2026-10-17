@@ -15,3 +15,5 @@ CREATE TABLE IF NOT EXISTS downloads (
 CREATE INDEX IF NOT EXISTS idx_downloads_status ON downloads(status);
 CREATE INDEX IF NOT EXISTS idx_downloads_created_at ON downloads(created_at);
 CREATE INDEX IF NOT EXISTS idx_downloads_url ON downloads(url_original);
+
+ALTER TABLE downloads ADD COLUMN IF NOT EXISTS error_message TEXT;
