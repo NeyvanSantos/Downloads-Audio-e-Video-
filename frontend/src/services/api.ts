@@ -50,14 +50,15 @@ export const downloadService = {
 
   downloadFile: async (taskId: string): Promise<void> => {
     const response = await api.get(`/download/${taskId}`, { responseType: 'blob' });
-    const blob = new Blob([response.data], { type: response.headers['content-type'] });
-    const url = window.URL.createObjectURL(blob);
+    const blob = new Blob([response.data], { type: (response.headers['content-type'] as string) || 'application/octet-stream' });
+    const downloadUrl = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = response.headers['content-disposition'].split('filename=')[1] || 'download';
+    a.href = downloadUrl;
+    const disposition = response.headers['content-disposition'] as string;
+    a.download = disposition ? disposition.split('filename=')[1] : 'download';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+    window.URL.revokeObjectURL(downloadUrl);
   },
 };

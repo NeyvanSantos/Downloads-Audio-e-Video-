@@ -5,7 +5,6 @@ const App: React.FC = () => {
   const [url, setUrl] = useState('');
   const [format, setFormat] = useState<'video' | 'audio'>('video');
   const [quality, setQuality] = useState('1080p');
-  const [taskId, setTaskId] = useState('');
   const [metadata, setMetadata] = useState<{ title: string; duration: number; thumbnail?: string } | null>(null);
   const [status, setStatus] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -17,7 +16,6 @@ const App: React.FC = () => {
       const data = await downloadService.getPreview(url);
       setMetadata(data);
       setStatus('');
-      setTaskId('');
     } catch (error: any) {
       setStatus('Erro ao carregar pré-visualização. Verifique a URL.');
       console.error('Failed to fetch preview:', error);
@@ -33,12 +31,9 @@ const App: React.FC = () => {
       const response = await downloadService.startDownload({
         url,
         format,
-        quality: format === 'video' ? quality : 'mp3',
+        quality: (format === 'video' ? quality : 'mp3') as '4k' | '1080p' | '720p' | 'mp3',
       });
-      setTaskId(response.taskId);
       setStatus('Iniciando download...');
-
-      // Polling para status
       checkStatus(response.taskId);
     } catch (error: any) {
       setStatus('Erro ao iniciar download.');
