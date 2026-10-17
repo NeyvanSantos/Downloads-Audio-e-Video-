@@ -1,69 +1,35 @@
-import { Request, Response, Router } from 'express';
-import { createDownload, getDownloadStatus, getDownloadLink, cleanupExpiredDownloads } from '../services';
+import { NextFunction, Request, Response, Router } from 'express';
+import { createDownload, getDownloadStatus, getDownloadLink, getVideoMetadata } from '../services';
 import { DownloadRequest } from '../types';
+import { validatePublicUrl, validateTaskId } from '../validation';
 
 const router = Router();
+const wrap = (handler: (req: Request, res: Response) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) => { void handler(req, res).catch(next); };
 
-router.post('/download', async (req: Request, res: Response) => {
-  try {
-    const data: DownloadRequest = req.body;
-    const ipAddress = req.ip || 'unknown';
-
-    if (!data.url) {
-      return res.status(400).json({ error: 'URL is required' });
-    }
-
-    const result = await createDownload(data, ipAddress);
-    res.status(200).json({ taskId: result.taskId, message: result.message });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
+router.post('/download', wrap(async (req, res) => {
+  const url = await validatePublicUrl(req.body?.url);
+  const { format, quality } = req.body;
+  if (!['video', 'audio'].includes(format) || (quality && !['4k', '1080p', '720p', 'mp3'].includes(quality)) || (format === 'video' && quality === 'mp3')) {
+    return res.status(400).json({ error: 'Formato ou qualidade inválidos.' });
   }
-});
-
-router.get('/status/:taskId', async (req: Request, res: Response) => {
-  try {
-    const { taskId } = req.params;
-    const status = await getDownloadStatus(taskId);
-
-    if (!status) {
-      return res.status(404).json({ error: 'Download not found' });
-    }
-
-    res.status(200).json(status);
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-router.get('/preview', async (req: Request, res: Response) => {
-  try {
-    const { url } = req.query;
-
-    if (!url) {
-      return res.status(400).json({ error: 'URL is required' });
-    }
-
-    const { getVideoMetadata } = await import('../services');
-    const metadata = await getVideoMetadata(url as string);
-    res.status(200).json(metadata);
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-router.get('/download/:taskId', async (req: Request, res: Response) => {
-  try {
-    const { taskId } = req.params;
-    const download = await getDownloadLink(taskId);
-
-    if (!download) {
-      return res.status(404).json({ error: 'Download not found or not ready' });
-    }
-
-    res.download(download.file_path, download.file_name);
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
+  const result = await createDownload({ url, format, quality } as DownloadRequest, req.ip || 'unknown');
+  return res.status(202).json(result);
+}));
+router.get('/status/:taskId', wrap(async (req, res) => {
+  validateTaskId(req.params.taskId);
+  const status = await getDownloadStatus(req.params.taskId);
+  return status ? res.json(status) : res.status(404).json({ error: 'Download não encontrado ou expirado.' });
+}));
+router.get('/preview', wrap(async (req, res) => {
+  const url = await validatePublicUrl(req.query.url);
+  return res.json(await getVideoMetadata(url));
+}));
+router.get('/download/:taskId', wrap(async (req, res) => {
+  validateTaskId(req.params.taskId);
+  const download = await getDownloadLink(req.params.taskId);
+  if (!download) return res.status(404).json({ error: 'Download indisponível ou expirado.' });
+  res.download(download.file_path, download.file_name, error => {
+    if (error && !res.headersSent) res.status(404).json({ error: 'Arquivo indisponível.' });
+  });
+}));
 export default router;

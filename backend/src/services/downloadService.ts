@@ -1,139 +1,72 @@
+import 'dotenv/config';
 import pool from '../database/connection';
-import { DownloadRequest, DownloadStatus, VideoMetadata, DownloadRecord } from '../types';
-import { cacheMetadata, getCachedMetadata, invalidateCache } from './cache';
-import { extractVideoInfo, downloadVideo, convertToMp3, cleanupFile } from './mediaProcessor';
-import { v4 as uuidv4 } from 'uuid';
-import fs from 'fs';
+import { DownloadRequest, DownloadStatus, VideoMetadata } from '../types';
+import { cacheMetadata, getCachedMetadata } from './cache';
+import { extractVideoInfo, downloadVideo, cleanupTask } from './mediaProcessor';
+import { randomUUID } from 'crypto';
 import path from 'path';
-import { Client } from 'redis';
 
-const DOWNLOADED_FILES_DIR = path.join(__dirname, '../../downloads');
-
-const getLatestFile = (directory: string): string | null => {
-  const files = fs.readdirSync(directory).map(file => {
-    const filePath = path.join(directory, file);
-    return { file, mtime: fs.statSync(filePath).mtime };
-  }).sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
-  
-  return files.length > 0 ? files[0].file : null;
-};
+const maxDownloads = 2;
+let activeDownloads = 0;
 
 export const getVideoMetadata = async (url: string): Promise<VideoMetadata> => {
   const cached = await getCachedMetadata(url);
-  if (cached) {
-    return cached;
-  }
-
+  if (cached) return cached;
   const info = await extractVideoInfo(url);
+  const heights = new Set<number>((info.formats || []).map((entry: { height?: number }) => entry.height || 0));
   const metadata: VideoMetadata = {
-    title: info.title,
-    duration: info.duration,
-    thumbnail: info.thumbnail,
-    available_qualities: ['720p', '1080p', '4k']
+    title: info.title, duration: info.duration || 0, thumbnail: info.thumbnail,
+    available_qualities: [720, 1080, 2160].filter(height => [...heights].some(value => value >= height)).map(height => height === 2160 ? '4k' : `${height}p`),
   };
-
   await cacheMetadata(url, metadata);
   return metadata;
 };
 
-export const createDownload = async (data: DownloadRequest, ipAddress: string): Promise<{ taskId: string; message: string }> => {
-  const taskId = uuidv4();
-  const quality = data.format === 'audio' ? 'mp3' : (data.quality || '1080p');
-
-  const query = `
-    INSERT INTO downloads (id, url_original, type, quality, status, ip_address, expires_at)
-    VALUES ($1, $2, $3, $4, 'pending', $5, NOW() + INTERVAL '1 hour')
-    RETURNING *
-  `;
-  
-  const values = [taskId, data.url, data.format, quality, ipAddress];
-  const result = await pool.query(query, values);
-
+const processDownload = async (taskId: string, data: DownloadRequest, quality: string) => {
   try {
-    const metadata = await getVideoMetadata(data.url);
-    
-    await pool.query(
-      'UPDATE downloads SET url_extracted = $1, status = $2 WHERE id = $3',
-      [data.url, 'downloading', taskId]
-    );
-
-    const outputDir = path.join(__dirname, '../../downloads');
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true });
-    }
-
-    await downloadVideo(data.url, data.format, quality);
-
-    const latestFile = getLatestFile(outputDir);
-    if (latestFile) {
-      const filePath = path.join(outputDir, latestFile);
-      await pool.query(
-        'UPDATE downloads SET file_path = $1, file_name = $2, status = $3 WHERE id = $4',
-        [filePath, latestFile, 'ready', taskId]
-      );
-
-      if (data.format === 'audio') {
-        const mp3Path = filePath.replace(/\.[^/.]+$/, '.mp3');
-        await convertToMp3(filePath, mp3Path);
-        await cleanupFile(filePath);
-        
-        await pool.query(
-          'UPDATE downloads SET file_path = $1, file_name = $2 WHERE id = $3',
-          [mp3Path, path.basename(mp3Path), taskId]
-        );
-      }
-    }
-
-    await invalidateCache(data.url);
-
-    return { taskId, message: 'Download iniciado com sucesso' };
-  } catch (error: any) {
+    await pool.query('UPDATE downloads SET status = $1 WHERE id = $2', ['downloading', taskId]);
+    const filePath = await downloadVideo(data.url, data.format, quality, taskId);
+    await pool.query('UPDATE downloads SET file_path = $1, file_name = $2, status = $3, expires_at = NOW() + INTERVAL \'1 hour\' WHERE id = $4', [filePath, path.basename(filePath), 'ready', taskId]);
+  } catch (error) {
+    console.error('Download failed:', taskId, error);
+    await cleanupTask(taskId).catch(console.error);
     await pool.query('UPDATE downloads SET status = $1 WHERE id = $2', ['failed', taskId]);
-    throw new Error(`Download failed: ${error.message}`);
+  } finally {
+    activeDownloads--;
   }
+};
+
+export const createDownload = async (data: DownloadRequest, ipAddress: string) => {
+  if (activeDownloads >= maxDownloads) throw Object.assign(new Error('Servidor ocupado. Tente novamente em instantes.'), { status: 429 });
+  activeDownloads++;
+  const taskId = randomUUID();
+  const quality = data.format === 'audio' ? 'mp3' : data.quality || '1080p';
+  try {
+    await pool.query(`INSERT INTO downloads (id, url_original, type, quality, status, ip_address, expires_at) VALUES ($1, $2, $3, $4, 'pending', $5, NOW() + INTERVAL '1 hour')`, [taskId, data.url, data.format, quality, ipAddress]);
+  } catch (error) {
+    activeDownloads--;
+    throw error;
+  }
+  void processDownload(taskId, data, quality).catch(error => console.error('Failed to persist task failure:', error));
+  return { taskId, message: 'Download iniciado' };
 };
 
 export const getDownloadStatus = async (taskId: string): Promise<DownloadStatus | null> => {
-  const result = await pool.query(
-    'SELECT status, file_path, file_name, created_at FROM downloads WHERE id = $1',
-    [taskId]
-  );
-
-  if (result.rows.length === 0) {
-    return null;
-  }
-
-  const row = result.rows[0];
-  return {
-    status: row.status as DownloadStatus['status'],
-    message: row.status === 'ready' ? 'Download completo' : undefined
-  };
+  const result = await pool.query('SELECT status FROM downloads WHERE id = $1 AND expires_at > NOW()', [taskId]);
+  if (!result.rows.length) return null;
+  const status = result.rows[0].status;
+  return { status, message: status === 'failed' ? 'O processamento falhou. Tente novamente.' : status === 'ready' ? 'Arquivo pronto' : undefined };
 };
 
 export const getDownloadLink = async (taskId: string): Promise<{ file_path: string; file_name: string } | null> => {
-  const result = await pool.query(
-    'SELECT file_path, file_name FROM downloads WHERE id = $1 AND status = $2',
-    [taskId, 'ready']
-  );
-
-  if (result.rows.length === 0) {
-    return null;
-  }
-
-  return {
-    file_path: result.rows[0].file_path,
-    file_name: result.rows[0].file_name
-  };
+  const result = await pool.query('SELECT file_path, file_name FROM downloads WHERE id = $1 AND status = $2 AND expires_at > NOW()', [taskId, 'ready']);
+  return result.rows[0] || null;
 };
 
 export const cleanupExpiredDownloads = async () => {
-  const result = await pool.query(
-    'SELECT file_path FROM downloads WHERE expires_at < NOW() AND file_path IS NOT NULL'
-  );
-
+  const result = await pool.query("SELECT id, file_path FROM downloads WHERE expires_at < NOW() AND status NOT IN ('pending', 'downloading', 'converting')");
   for (const row of result.rows) {
-    await cleanupFile(row.file_path);
+    await cleanupTask(row.id);
+    await pool.query('DELETE FROM downloads WHERE id = $1', [row.id]);
   }
-
-  await pool.query('DELETE FROM downloads WHERE expires_at < NOW()');
 };

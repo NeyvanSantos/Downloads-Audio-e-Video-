@@ -1,14 +1,21 @@
 {
   "name": "video-downloader",
   "version": "1.0.0",
-  "description": "Site de downloads de vídeos e músicas - GitHub Pages + Cloudflare Workers",
+  "description": "Interface no GitHub Pages e API de processamento Node.js",
   "private": true,
   "scripts": {
-    "dev": "cd frontend && npm run dev",
-    "build": "cd frontend && npm run build",
-    "deploy": "./deploy.sh"
+    "install:all": "npm ci --prefix frontend && npm ci --prefix backend && npm ci --prefix worker",
+    "dev": "npm run dev --prefix frontend",
+    "dev:backend": "npm run dev --prefix backend",
+    "build": "npm run build --prefix frontend && npm run build --prefix backend && npm run check --prefix worker",
+    "deploy": "gh workflow run deploy.yml --ref main"
   },
-  "keywords": ["video", "download", "youtube", "mp3"],
+  "keywords": [
+    "video",
+    "download",
+    "youtube",
+    "mp3"
+  ],
   "author": "",
   "license": "MIT"
 }

@@ -2,8 +2,8 @@ name = "video-downloader"
 main = "src/worker.ts"
 compatibility_date = "2024-10-17"
 
-[env.production]
-name = "video-downloader-prod"
-
-[env.staging]
-name = "video-downloader-staging"
+# Set BACKEND_URL to the externally hosted Express API, including /api.
+# Example: https://api.example.com/api
+[vars]
+BACKEND_URL = ""
+CORS_ORIGIN = "https://neyvansantos.github.io"

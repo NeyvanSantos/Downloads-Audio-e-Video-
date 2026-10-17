@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'https://video-downloader.your-username.workers.dev';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ||
+  (import.meta.env.DEV ? 'http://localhost:3001/api' : '');
+
+export const apiConfigured = Boolean(API_BASE_URL);
 
 export interface DownloadRequest {
   url: string;
@@ -27,9 +30,15 @@ export interface DownloadStatus {
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
+});
+
+api.interceptors.request.use((config) => {
+  if (!apiConfigured) throw new Error('A API de downloads ainda não foi configurada.');
+  return config;
 });
 
 export const downloadService = {
@@ -49,16 +58,11 @@ export const downloadService = {
   },
 
   downloadFile: async (taskId: string): Promise<void> => {
-    const response = await api.get(`/download/${taskId}`, { responseType: 'blob' });
-    const blob = new Blob([response.data], { type: (response.headers['content-type'] as string) || 'application/octet-stream' });
-    const downloadUrl = window.URL.createObjectURL(blob);
+    if (!apiConfigured) throw new Error('A API de downloads ainda não foi configurada.');
     const a = document.createElement('a');
-    a.href = downloadUrl;
-    const disposition = response.headers['content-disposition'] as string;
-    a.download = disposition ? disposition.split('filename=')[1] : 'download';
+    a.href = `${API_BASE_URL}/download/${encodeURIComponent(taskId)}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    window.URL.revokeObjectURL(downloadUrl);
   },
 };

@@ -1,72 +1,50 @@
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
-import fs from 'fs';
+import fs from 'fs/promises';
 
-const execPromise = promisify(exec);
-
-const YT_DLP_PATH = process.env.YT_DLP_PATH || 'yt-dlp';
-const FFMPEG_PATH = process.env.FFMPEG_PATH || 'ffmpeg';
+const run = promisify(execFile);
+export const downloadsDir = path.resolve(__dirname, '../../downloads');
+const ytDlp = () => process.env.YT_DLP_PATH || 'yt-dlp';
 
 export const extractVideoInfo = async (url: string) => {
-  try {
-    const { stdout } = await execPromise(`${YT_DLP_PATH} --dump-json --no-playlist "${url}"`);
-    return JSON.parse(stdout);
-  } catch (error: any) {
-    throw new Error(`Failed to extract video info: ${error.message}`);
-  }
+  const { stdout } = await run(ytDlp(), ['--dump-single-json', '--skip-download', '--no-playlist', '--', url], {
+    timeout: 60000, maxBuffer: 10 * 1024 * 1024,
+  });
+  return JSON.parse(stdout);
 };
 
-export const downloadVideo = async (url: string, format: 'video' | 'audio', quality: string) => {
-  const outputDir = path.join(__dirname, '../../downloads');
-  
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true });
-  }
-
-  const outputTemplate = path.join(outputDir, '%(title)s.%(ext)s');
-  
-  let formatOptions = '';
-  if (format === 'video') {
-    if (quality === '4k') {
-      formatOptions = '-f "bestvideo[height<=2160]+bestaudio/best[height<=2160]"';
-    } else if (quality === '1080p') {
-      formatOptions = '-f "bestvideo[height<=1080]+bestaudio/best[height<=1080]"';
-    } else if (quality === '720p') {
-      formatOptions = '-f "bestvideo[height<=720]+bestaudio/best[height<=720]"';
-    } else {
-      formatOptions = '-f bestvideo+bestaudio';
-    }
+export const downloadVideo = async (url: string, format: 'video' | 'audio', quality: string, taskId: string) => {
+  const directory = path.join(downloadsDir, taskId);
+  await fs.mkdir(directory, { recursive: true });
+  const args = ['--no-playlist', '--no-simulate', '-o', path.join(directory, '%(title).150B.%(ext)s'), '--print', 'after_move:filepath'];
+  if (process.env.FFMPEG_PATH) args.push('--ffmpeg-location', process.env.FFMPEG_PATH);
+  if (format === 'audio') {
+    args.push('-f', 'bestaudio/best', '--extract-audio', '--audio-format', 'mp3', '--audio-quality', '0');
   } else {
-    formatOptions = '-f bestaudio --extract-audio --audio-format mp3 --audio-quality 0';
+    const height = quality === '4k' ? 2160 : quality === '720p' ? 720 : 1080;
+    args.push('-f', `bestvideo[height<=${height}]+bestaudio/best[height<=?${height}]`, '--merge-output-format', 'mp4');
   }
-
-  try {
-    const { stdout } = await execPromise(
-      `${YT_DLP_PATH} ${formatOptions} -o "${outputTemplate}" "${url}"`,
-      { maxBuffer: 1024 * 1024 * 100 }
-    );
-    return stdout;
-  } catch (error: any) {
-    throw new Error(`Download failed: ${error.message}`);
-  }
-};
-
-export const convertToMp3 = async (inputPath: string, outputPath: string) => {
-  try {
-    await execPromise(`${FFMPEG_PATH} -i "${inputPath}" -vn -acodec libmp3lame -q:a 2 "${outputPath}"`);
-    return outputPath;
-  } catch (error: any) {
-    throw new Error(`MP3 conversion failed: ${error.message}`);
-  }
+  args.push('--', url);
+  const { stdout } = await run(ytDlp(), args, { timeout: 30 * 60 * 1000, maxBuffer: 10 * 1024 * 1024 });
+  const filePath = path.resolve(stdout.trim().split(/\r?\n/).pop() || '');
+  if (!filePath.startsWith(directory + path.sep)) throw new Error('Caminho de arquivo inválido.');
+  await fs.access(filePath);
+  return filePath;
 };
 
 export const cleanupFile = async (filePath: string) => {
-  try {
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-  } catch (error) {
-    console.error(`Failed to cleanup file ${filePath}:`, error);
-  }
+  const resolved = path.resolve(filePath);
+  if (!resolved.startsWith(downloadsDir + path.sep)) throw new Error('Caminho de limpeza inválido.');
+  await fs.rm(resolved, { force: true });
+  // Each task owns its directory; remove it only if empty.
+  await fs.rmdir(path.dirname(resolved)).catch(() => {});
+};
+
+export const cleanupTask = async (taskId: string) => {
+  if (!/^[a-f0-9-]{36}$/i.test(taskId)) throw new Error('Identificador inválido.');
+  const directory = path.join(downloadsDir, taskId);
+  const files = await fs.readdir(directory).catch(() => []);
+  for (const file of files) await cleanupFile(path.join(directory, file));
+  await fs.rmdir(directory).catch(() => {});
 };

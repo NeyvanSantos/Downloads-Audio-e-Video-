@@ -1,22 +1,10 @@
-FROM node:18-alpine
-
-RUN apk add --no-cache python3 make g++ ffmpeg yt-dlp
-
+FROM node:22-alpine
+RUN apk add --no-cache python3 ffmpeg yt-dlp
 WORKDIR /app
-
-COPY backend/package*.json ./backend/
-COPY frontend/package*.json ./frontend/
-
-RUN npm install -g concurrently
-RUN cd backend && npm install
-RUN cd frontend && npm install
-
-COPY backend/. ./backend/
-COPY frontend/. ./frontend/
-
-RUN cd backend && npm run build
-RUN cd frontend && npm run build
-
-EXPOSE 3000
-
-CMD ["npx", "concurrently", "npm run start --prefix backend", "npm run preview --prefix frontend"]
+COPY backend/package*.json ./
+RUN npm ci
+COPY backend/tsconfig.json ./
+COPY backend/src ./src
+RUN npm run build && npm prune --omit=dev
+EXPOSE 3001
+CMD ["sh", "-c", "node dist/database/migrate.js && node dist/app.js"]

@@ -1,12 +1,3 @@
 # Backend
-cd backend
-npm install
 
-# Criar banco de dados
-createdb video_downloader
-
-# Executar migrations
-psql -U postgres -d video_downloader -f src/database/migrations/001_create_downloads_table.sql
-
-# Iniciar backend
-npm run dev
+Consulte o [README principal](../README.md). Copie `.env.example` para `.env`, configure PostgreSQL e Redis, instale com `npm ci`, execute `npm run migration:run` e `npm run dev`.

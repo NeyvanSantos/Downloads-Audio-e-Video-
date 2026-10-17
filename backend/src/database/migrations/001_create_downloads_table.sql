@@ -12,6 +12,6 @@ CREATE TABLE IF NOT EXISTS downloads (
   ip_address VARCHAR(45)
 );
 
-CREATE INDEX idx_downloads_status ON downloads(status);
-CREATE INDEX idx_downloads_created_at ON downloads(created_at);
-CREATE INDEX idx_downloads_url ON downloads(url_original);
+CREATE INDEX IF NOT EXISTS idx_downloads_status ON downloads(status);
+CREATE INDEX IF NOT EXISTS idx_downloads_created_at ON downloads(created_at);
+CREATE INDEX IF NOT EXISTS idx_downloads_url ON downloads(url_original);

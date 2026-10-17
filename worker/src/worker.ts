@@ -1,124 +1,39 @@
-import { createDownload, getDownloadStatus, getVideoMetadata, getDownloadLink, cleanupExpiredDownloads } from './downloadService';
-import { DownloadRequest } from './types';
-
-// CORS headers
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
+interface Env {
+  BACKEND_URL: string;
+  CORS_ORIGIN: string;
+}
 
 export default {
-  async fetch(request: Request): Promise<Response> {
-    // Handle CORS preflight
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: corsHeaders });
-    }
-
-    const url = new URL(request.url);
-    const path = url.pathname.replace('/api', '');
-
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const headers = new Headers({
+      'Access-Control-Allow-Origin': env.CORS_ORIGIN || 'http://localhost:3000',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    });
+    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers });
+    const incoming = new URL(request.url);
+    const path = incoming.pathname.replace(/^\/api(?=\/|$)/, '');
+    const allowed = request.method === 'GET'
+      ? /^\/(health|preview|status\/[a-f0-9-]{36}|download\/[a-f0-9-]{36})$/i.test(path)
+      : request.method === 'POST' && path === '/download';
+    if (!allowed) return Response.json({ error: 'Rota não encontrada.' }, { status: 404, headers });
+    if (!env.BACKEND_URL) return Response.json({ error: 'Servidor de processamento não configurado.' }, { status: 503, headers });
     try {
-      // Health check
-      if (path === '/health') {
-        return new Response(
-          JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }),
-          { 
-            headers: { 'Content-Type': 'application/json', ...corsHeaders },
-            status: 200 
-          }
-        );
-      }
-
-      // Get video metadata
-      if (path === '/preview') {
-        const videoUrl = url.searchParams.get('url');
-        if (!videoUrl) {
-          return new Response(JSON.stringify({ error: 'URL is required' }), { 
-            status: 400, 
-            headers: { 'Content-Type': 'application/json', ...corsHeaders }
-          });
-        }
-
-        const metadata = await getVideoMetadata(videoUrl);
-        return new Response(JSON.stringify(metadata), { 
-          headers: { 'Content-Type': 'application/json', ...corsHeaders },
-          status: 200 
-        });
-      }
-
-      // Start download
-      if (path === '/download') {
-        const data = await request.json() as DownloadRequest;
-        const clientId = request.headers.get('CF-Connecting-IP') || 'unknown';
-
-        if (!data.url) {
-          return new Response(JSON.stringify({ error: 'URL is required' }), { 
-            status: 400, 
-            headers: { 'Content-Type': 'application/json', ...corsHeaders }
-          });
-        }
-
-        const result = await createDownload(data, clientId);
-        return new Response(JSON.stringify(result), { 
-          headers: { 'Content-Type': 'application/json', ...corsHeaders },
-          status: 200 
-        });
-      }
-
-      // Get download status
-      if (path.startsWith('/status/')) {
-        const taskId = path.split('/status/')[1];
-        const status = await getDownloadStatus(taskId);
-
-        if (!status) {
-          return new Response(JSON.stringify({ error: 'Download not found' }), { 
-            status: 404, 
-            headers: { 'Content-Type': 'application/json', ...corsHeaders }
-          });
-        }
-
-        return new Response(JSON.stringify(status), { 
-          headers: { 'Content-Type': 'application/json', ...corsHeaders },
-          status: 200 
-        });
-      }
-
-      // Download file
-      if (path.startsWith('/download/')) {
-        const taskId = path.split('/download/')[1];
-        const download = await getDownloadLink(taskId);
-
-        if (!download) {
-          return new Response(JSON.stringify({ error: 'Download not found or not ready' }), { 
-            status: 404, 
-            headers: { 'Content-Type': 'application/json', ...corsHeaders }
-          });
-        }
-
-        // Serve file (simplified - in production use direct blob storage)
-        return new Response(
-          JSON.stringify({ 
-            downloadUrl: `/api/download/${taskId}`,
-            fileName: download.file_name 
-          }), 
-          { 
-            headers: { 'Content-Type': 'application/json', ...corsHeaders },
-            status: 200 
-          }
-        );
-      }
-
-      return new Response(JSON.stringify({ error: 'Not found' }), { 
-        status: 404, 
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      const target = new URL(env.BACKEND_URL.replace(/\/$/, '') + path);
+      target.search = incoming.search;
+      const upstream = await fetch(target.toString(), {
+        method: request.method,
+        headers: { 'Content-Type': 'application/json' },
+        body: request.method === 'POST' ? await request.text() : undefined,
+        redirect: 'manual',
       });
-
-    } catch (error: any) {
-      return new Response(JSON.stringify({ error: error.message }), { 
-        status: 500, 
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
+      for (const name of ['content-type', 'content-disposition', 'content-length', 'retry-after']) {
+        const value = upstream.headers.get(name);
+        if (value) headers.set(name, value);
+      }
+      return new Response(upstream.body, { status: upstream.status, headers });
+    } catch {
+      return Response.json({ error: 'Servidor de processamento indisponível.' }, { status: 502, headers });
     }
-  }
+  },
 };

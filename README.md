@@ -1,225 +1,79 @@
 # Video Downloader
 
-Plataforma completa para download de vídeos e músicas do YouTube e outras plataformas, com suporte a resoluções até 4K e exportação para MP3.
+Interface React/TypeScript para baixar vídeos e extrair MP3. O frontend pode ser hospedado no GitHub Pages; os arquivos são processados por uma API Node.js externa com yt-dlp e FFmpeg.
 
-## 🚀 Recursos
+## Pastas
 
-- Download de vídeos do YouTube
-- Download de vídeos diretos (URLs)
-- Vídeo em múltiplas resoluções (4K/1080p/720p)
-- Extração de áudio para MP3
-- Interface moderna e responsiva
-- Processamento rápido e eficiente
+- `frontend/`: React, Vite e Tailwind; publicação estática no Pages.
+- `backend/`: Express, PostgreSQL, Redis e execução de yt-dlp/FFmpeg.
+- `worker/`: proxy opcional do Cloudflare para a API. Não executa programas nem converte mídia.
 
-## 🛠️ Stack Tecnológica
+## GitHub Pages
 
-### Frontend
-- React 18 + TypeScript
-- Vite (build tool)
-- Tailwind CSS
-- Axios
+Em Settings → Pages, selecione **GitHub Actions** como origem. O workflow `.github/workflows/deploy.yml` compila a `main`, envia `frontend/dist` como artefato e publica com `actions/deploy-pages`.
 
-### Backend
-- Node.js + TypeScript
-- Express.js
-- PostgreSQL
-- Redis
-- yt-dlp/ffmpeg
+Site: https://neyvansantos.github.io/Downloads-Audio-e-Video-/
 
-## 📋 Requisitos
+Em Settings → Secrets and variables → Actions → Variables, configure `VITE_API_BASE_URL` com a URL pública HTTPS da API, incluindo `/api`, por exemplo `https://api.example.com/api`. Execute novamente o workflow após mudar a variável. Sem ela, o site mostra um aviso e desabilita downloads.
 
-- Node.js 18+
-- Python 3+
-- FFmpeg
-- yt-dlp
-- PostgreSQL 15+
-- Redis
+O Pages hospeda a interface. Para downloads funcionarem, publique o backend em um servidor ou serviço de containers com armazenamento, PostgreSQL e Redis. Configure `CORS_ORIGIN=https://neyvansantos.github.io` nesse servidor. Credenciais do banco ficam apenas no backend.
 
-## 🚀 Instalação e Execução
+## Desenvolvimento local
 
-### Opção 1: Instalação Local
+Requer Node.js 22+, PostgreSQL, Redis, yt-dlp e FFmpeg no PATH.
 
-```bash
-# Instalar dependências
+```powershell
 npm run install:all
-
-# Configurar variáveis de ambiente
-cp backend/.env.example backend/.env
-# Edite o arquivo .env com suas configurações
-
-# Criar banco de dados
-createdb video_downloader
-
-# Executar migrations
-psql -U postgres -d video_downloader -f backend/src/database/migrations/001_create_downloads_table.sql
-
-# Iniciar aplicação
+Copy-Item backend/.env.example backend/.env
+# Ajuste os dados de conexão no backend/.env e crie o banco video_downloader.
+npm run migration:run --prefix backend
+npm run dev:backend
+# Em outro terminal:
 npm run dev
 ```
 
-### Opção 2: Docker
+Frontend: http://localhost:3000/Downloads-Audio-e-Video-/
+API: http://localhost:3001/api
 
-```bash
-# Construir e iniciar containers
-docker-compose up --build
+O frontend usa a API local automaticamente em desenvolvimento. Para outro endereço, copie `frontend/.env.example` para `frontend/.env` e ajuste `VITE_API_BASE_URL`.
 
-# Iniciar containers (se já construídos)
-docker-compose up
+## Docker
+
+```powershell
+docker compose up --build
 ```
 
-## 🔌 API Endpoints
+Sobe a API em `http://localhost:3001/api`, PostgreSQL e Redis. O frontend continua no Pages ou no Vite local. Os downloads e o banco usam volumes persistentes. Em produção, use HTTPS e uma senha própria de PostgreSQL.
 
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| GET | `/api/health` | Status do servidor |
-| GET | `/api/preview?url=` | Metadados do vídeo |
-| POST | `/api/download` | Iniciar download |
-| GET | `/api/status/:taskId` | Status do download |
-| GET | `/api/download/:taskId` | Baixar arquivo |
+## API
 
-## 📝 Variáveis de Ambiente
+- `GET /api/health`: disponibilidade do processo.
+- `GET /api/preview?url=...`: metadados.
+- `POST /api/download`: recebe `{url, format, quality}` e retorna `202` com `taskId`.
+- `GET /api/status/:taskId`: acompanha o processamento.
+- `GET /api/download/:taskId`: entrega o arquivo pronto.
 
-```
-NODE_ENV=development
-PORT=3001
+Formatos: `video` e `audio`. Qualidades: `720p`, `1080p`, `4k`, `mp3`.
+Cada tarefa tem uma pasta própria. Áudio é convertido uma vez pelo yt-dlp. Arquivos prontos expiram uma hora após o processamento; a limpeza roda periodicamente. Tarefas interrompidas são marcadas como falhas na inicialização. Execute uma única instância da API: o limite de dois downloads e a recuperação de tarefas são locais ao processo.
 
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_DB=video_downloader
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
+As URLs iniciais precisam resolver para endereços públicos. Essa verificação não substitui bloqueios de acesso à rede privada no ambiente de hospedagem, pois os extratores podem seguir outros endereços.
 
-REDIS_HOST=localhost
-REDIS_PORT=6379
+## Cloudflare opcional
 
-YT_DLP_PATH=yt-dlp
-FFMPEG_PATH=ffmpeg
+Em `worker/wrangler.toml`, configure `BACKEND_URL` com a URL HTTPS da API, incluindo `/api`, e `CORS_ORIGIN` com a origem do site. Depois:
 
-CORS_ORIGIN=http://localhost:3000
+```powershell
+npm run deploy --prefix worker
 ```
 
-## 📁 Estrutura do Projeto
+A variável `VITE_API_BASE_URL` pode apontar diretamente para a API ou para esse proxy. Para arquivos grandes, a conexão direta evita limites adicionais de transferência do proxy.
 
-```
-video-downloader/
-├── backend/              # API e lógica de servidor
-│   ├── src/
-│   │   ├── controllers/
-│   │   ├── routes/
-│   │   ├── services/
-│   │   ├── utils/
-│   │   ├── database/
-│   │   ├── types/
-│   │   └── app.ts
-│   └── package.json
-│
-├── frontend/            # Interface do usuário
-│   ├── src/
-│   │   ├── components/
-│   │   ├── pages/
-│   │   ├── hooks/
-│   │   ├── services/
-│   │   ├── types/
-│   │   └── App.tsx
-│   └── package.json
-│
-├── docker-compose.yml
-└── package.json
+## Verificações
+
+```powershell
+npm run build
+npm run lint --prefix frontend
+npm test --prefix backend
 ```
 
-## 🔧 Setup Completo
-
-### Requisitos Pré-existentes
-
-Antes de começar, certifique-se de ter instalado:
-
-- **Node.js 18+** (recomendado: 18 ou 20)
-- **Python 3.8+** (para yt-dlp)
-- **npm** ou **yarn**
-- **Git**
-
-#### Instalar FFmpeg
-
-**Windows:** https://ffmpeg.org/download.html
-
-**macOS:**
-```bash
-brew install ffmpeg
-```
-
-**Linux:**
-```bash
-sudo apt update && sudo apt install ffmpeg
-```
-
-#### Instalar yt-dlp
-
-**Windows:** https://github.com/yt-dlp/yt-dlp/releases
-
-**macOS/Linux:**
-```bash
-pip3 install yt-dlp
-```
-
-#### Instalar PostgreSQL
-
-**Windows:** https://www.postgresql.org/download/windows/
-
-**macOS:**
-```bash
-brew install postgresql@15
-brew services start postgresql@15
-```
-
-**Linux:**
-```bash
-sudo apt install postgresql postgresql-contrib
-sudo systemctl start postgresql
-```
-
-#### Instalar Redis
-
-**Windows:** Use Memurai ou WSL com Redis
-
-**macOS:**
-```bash
-brew install redis
-brew services start redis
-```
-
-**Linux:**
-```bash
-sudo apt install redis-server
-sudo systemctl start redis
-```
-
-### Instalação do Projeto
-
-```bash
-cd "G:\Download de Audio e Video\video-downloader"
-
-# Instalar todas as dependências
-npm run install:all
-
-# Configurar variáveis de ambiente
-cp backend/.env.example backend/.env
-# Edite backend/.env com suas configurações
-
-# Criar banco de dados
-createdb video_downloader
-
-# Executar migrations
-psql -U postgres -d video_downloader -f backend/src/database/migrations/001_create_downloads_table.sql
-
-# Iniciar aplicação
-npm run dev
-```
-
-## 📖 URLs da Aplicação
-
-- **Frontend:** http://localhost:3000
-- **Backend API:** http://localhost:3001
-
-## 📄 Licença
-
-MIT
+Os testes de regressão verificam validação de URLs/IDs, argumentos sem shell, isolamento de arquivos e conversão única de áudio. Downloads reais também dependem da disponibilidade e das restrições de cada fonte.
