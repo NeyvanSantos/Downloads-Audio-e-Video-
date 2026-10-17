@@ -74,6 +74,9 @@ A variável `VITE_API_BASE_URL` pode apontar diretamente para a API ou para esse
 npm run build
 npm run lint --prefix frontend
 npm test --prefix backend
+npm test --prefix worker
 ```
 
 Os testes de regressão verificam validação de URLs/IDs, argumentos sem shell, isolamento de arquivos e conversão única de áudio. Downloads reais também dependem da disponibilidade e das restrições de cada fonte.
+
+Para repetir a integração real (API, PostgreSQL e Redis precisam estar em execução; requer `ffprobe` no PATH): execute `node backend/test/integration.cjs`. O teste baixa uma amostra pública em vídeo e MP3, verifica os codecs e o limite de tarefas. Use `TEST_API_URL` para apontar para outra API de teste.

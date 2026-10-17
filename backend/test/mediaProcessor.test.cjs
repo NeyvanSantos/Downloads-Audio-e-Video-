@@ -40,4 +40,3 @@ test('audio is converted once and concurrent tasks own different directories', a
 test('cleanup refuses files outside the download directory', async () => {
   await assert.rejects(processor.cleanupFile(path.resolve('package.json')), /inválido/);
 });
-

@@ -26,6 +26,7 @@ jobs:
       - run: npm test --prefix backend
       - run: npm ci --prefix worker
       - run: npm run check --prefix worker
+      - run: npm test --prefix worker
   deploy:
     needs: check
     runs-on: ubuntu-latest
