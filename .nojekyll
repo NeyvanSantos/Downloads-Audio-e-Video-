@@ -1,0 +1,48 @@
+# Video Downloader
+
+Site de downloads de vídeos e músicas hospedado no GitHub Pages com backend serverless no Cloudflare Workers.
+
+## 🚀 Funcionamento
+
+- **Frontend:** Site estático hospedado no GitHub Pages
+- **Backend:** Cloudflare Workers (serverless) para processamento de vídeos com yt-dlp/ffmpeg
+- **Suporte:** YouTube e URLs diretas de vídeos
+
+## 📋 Recursos
+
+- ✅ Download de vídeos do YouTube em 4K/1080p/720p
+- ✅ Extração de áudio para MP3
+- ✅ Interface moderna e responsiva
+- ✅ Processamento rápido via edge functions
+
+## 🛠️ Setup Rápido
+
+### 1. Frontend (GitHub Pages)
+
+```bash
+npm install
+cd frontend
+npm install
+npm run dev
+```
+
+### 2. Backend (Cloudflare Workers)
+
+```bash
+cd worker
+npm install
+wrangler dev
+wrangler deploy
+```
+
+### 3. Configurar URL do Backend
+
+No arquivo `frontend/src/services/api.ts`, atualize:
+
+```typescript
+const API_BASE_URL = 'https://seu-worker.workers.dev';
+```
+
+## 📄 Licença
+
+MIT

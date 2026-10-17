@@ -1,0 +1,14 @@
+{
+  "name": "video-downloader",
+  "version": "1.0.0",
+  "description": "Site de downloads de vídeos e músicas - GitHub Pages + Cloudflare Workers",
+  "private": true,
+  "scripts": {
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "deploy": "./deploy.sh"
+  },
+  "keywords": ["video", "download", "youtube", "mp3"],
+  "author": "",
+  "license": "MIT"
+}
