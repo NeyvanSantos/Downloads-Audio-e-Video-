@@ -39,6 +39,26 @@ O frontend usa a API local automaticamente em desenvolvimento. Para outro endere
 
 ## Docker
 
+### API neste computador conectada ao GitHub Pages
+
+Com Docker Desktop em execução, abra o PowerShell na pasta do projeto:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Start-LocalApi.ps1 -ConnectPages
+```
+
+O script inicia API, PostgreSQL, Redis e um túnel HTTPS temporário, verifica as conexões e solicita uma nova publicação do Pages com a URL correta. O parâmetro `-ConnectPages` exige o GitHub CLI (`gh`) autenticado com acesso ao repositório. Sem esse parâmetro, apenas os serviços são iniciados e os endereços são exibidos.
+
+API local: `http://localhost:3001/api`. O site público funciona enquanto este computador, o Docker e o túnel estiverem ativos. O túnel gratuito é voltado a testes, não tem garantia de disponibilidade e muda de endereço quando é recriado. Após reiniciar o túnel/computador, execute novamente o comando acima para atualizar a conexão do site. Não é necessário abrir portas no roteador.
+
+Para parar sem apagar os arquivos ou o banco:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Stop-LocalApi.ps1
+```
+
+### API sem túnel
+
 ```powershell
 docker compose up --build
 ```

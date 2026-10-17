@@ -1,0 +1,17 @@
+services:
+  backend:
+    ports: !override
+      - "127.0.0.1:3001:3001"
+    restart: unless-stopped
+    environment:
+      CORS_ORIGIN: http://localhost:3000,https://neyvansantos.github.io
+  postgres:
+    restart: unless-stopped
+  redis:
+    restart: unless-stopped
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --url http://backend:3001
+    restart: unless-stopped
+    depends_on:
+      - backend
