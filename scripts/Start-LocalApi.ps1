@@ -1,8 +1,12 @@
 param([switch]$ConnectPages)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
+$previousCookiesPath = $env:YT_DLP_COOKIES_FILE
 Push-Location $projectRoot
 try {
+  if (Test-Path -LiteralPath (Join-Path $projectRoot '.local/youtube.cookies.txt')) {
+    $env:YT_DLP_COOKIES_FILE = '/app/local/youtube.cookies.txt'
+  }
   $compose = @('compose', '-p', 'video-downloader-local', '-f', 'docker-compose.yml', '-f', 'docker-compose.local.yml')
   & docker @compose up --detach --build
   if ($LASTEXITCODE -ne 0) { throw 'Não foi possível iniciar os serviços. Confira se o Docker Desktop está aberto.' }
@@ -41,4 +45,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Falha ao solicitar a publicação do site.' }
     Write-Host 'Publicação solicitada. Aguarde o workflow terminar antes de usar o site.'
   }
-} finally { Pop-Location }
+} finally {
+  $env:YT_DLP_COOKIES_FILE = $previousCookiesPath
+  Pop-Location
+}

@@ -8,3 +8,5 @@ dist/
 tmp/
 downloads/
 .wrangler/
+.local/
+*.cookies.txt

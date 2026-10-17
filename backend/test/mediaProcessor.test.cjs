@@ -40,3 +40,24 @@ test('audio is converted once and concurrent tasks own different directories', a
 test('cleanup refuses files outside the download directory', async () => {
   await assert.rejects(processor.cleanupFile(path.resolve('package.json')), /inválido/);
 });
+
+test('configured YouTube cookie file is passed as one argument only to YouTube', async () => {
+  const os = require('node:os');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'downloader-session-test-'));
+  const cookieFile = path.join(directory, 'session with spaces.cookies.txt');
+  const previous = process.env.YT_DLP_COOKIES_FILE;
+  try {
+    await fs.writeFile(cookieFile, '# Netscape HTTP Cookie File\n');
+    process.env.YT_DLP_COOKIES_FILE = cookieFile;
+    calls = [];
+    await processor.extractVideoInfo('https://www.youtube.com/watch?v=EQiQ2SaJ-Ls');
+    assert.equal(calls[0].args[calls[0].args.indexOf('--cookies') + 1], cookieFile);
+    await processor.extractVideoInfo('https://example.com/video');
+    assert(!calls[1].args.includes('--cookies'));
+  } finally {
+    if (previous === undefined) delete process.env.YT_DLP_COOKIES_FILE;
+    else process.env.YT_DLP_COOKIES_FILE = previous;
+    await fs.unlink(cookieFile);
+    await fs.rmdir(directory);
+  }
+});

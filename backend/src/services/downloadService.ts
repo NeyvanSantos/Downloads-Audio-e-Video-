@@ -73,6 +73,11 @@ export const createDownload = async (
   data: DownloadRequest,
   ipAddress: string,
 ) => {
+  // A personal session must never turn this public API into access to private videos.
+  const publicVideoId = youtubeVideoId(data.url);
+  if (process.env.YT_DLP_COOKIES_FILE && publicVideoId) {
+    await getYouTubePreview(publicVideoId);
+  }
   if (activeDownloads >= maxDownloads)
     throw Object.assign(
       new Error('Servidor ocupado. Tente novamente em instantes.'),

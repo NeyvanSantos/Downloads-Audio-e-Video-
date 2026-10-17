@@ -103,4 +103,16 @@ As prévias de vídeos públicos do YouTube usam o endpoint oEmbed do próprio Y
 
 A imagem Docker instala `yt-dlp[default]` via pip em ambiente isolado, incluindo o suporte EJS, e usa Node.js como runtime JavaScript. Para atualizar o extrator e suas dependências quando houver uma nova versão, reconstrua com `docker compose -p video-downloader-local -f docker-compose.yml -f docker-compose.local.yml build --no-cache backend` e execute novamente o script de início da API.
 
+### Sessão opcional do YouTube
+
+Quando o YouTube exigir uma sessão autorizada, um arquivo de cookies no formato Netscape pode ser importado explicitamente pelo proprietário deste computador:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Set-YouTubeSession.ps1 -CookiesFile "C:\caminho\youtube.cookies.txt"
+```
+
+O script seleciona apenas cookies de domínios do YouTube, salva em `.local/youtube.cookies.txt` (ignorado pelo Git e pelo build Docker) e reinicia a API com essa configuração. O arquivo é usado somente no processamento de links do YouTube; a API exige que a prévia seja pública antes de usar a sessão para uma tarefa. Não envie esse arquivo ao chat, ao GitHub ou a terceiros. A sessão não garante que o YouTube remova um limite aplicado à conexão.
+
+Para desativar, exclua apenas `.local/youtube.cookies.txt` e execute novamente o script de início. A API não importa sessões do navegador automaticamente.
+
 Para repetir a integração real (API, PostgreSQL e Redis precisam estar em execução; requer `ffprobe` no PATH): execute `node backend/test/integration.cjs`. O teste baixa uma amostra pública em vídeo e MP3, verifica os codecs e o limite de tarefas. Use `TEST_API_URL` para apontar para outra API de teste.

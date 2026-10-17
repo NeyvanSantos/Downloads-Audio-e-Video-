@@ -2,23 +2,29 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs/promises';
+import { existsSync } from 'fs';
 import { describeMediaError } from './mediaErrors';
+import { youtubeVideoId } from './youtubePreview';
 
 const run = promisify(execFile);
 export const downloadsDir = path.resolve(__dirname, '../../downloads');
 const ytDlp = () => process.env.YT_DLP_PATH || 'yt-dlp';
-const commonArgs = () => [
-  '--ignore-config',
-  '--no-playlist',
-  '--js-runtimes',
-  'node',
-];
+const commonArgs = (url: string) => {
+  const args = ['--ignore-config', '--no-playlist', '--js-runtimes', 'node'];
+  const cookies = process.env.YT_DLP_COOKIES_FILE;
+  if (cookies && youtubeVideoId(url)) {
+    if (!existsSync(cookies))
+      throw new Error('Configured YouTube session is missing');
+    args.push('--cookies', cookies);
+  }
+  return args;
+};
 
 export const extractVideoInfo = async (url: string) => {
   try {
     const { stdout } = await run(
       ytDlp(),
-      [...commonArgs(), '--dump-single-json', '--skip-download', '--', url],
+      [...commonArgs(url), '--dump-single-json', '--skip-download', '--', url],
       {
         timeout: 60000,
         maxBuffer: 10 * 1024 * 1024,
@@ -42,7 +48,7 @@ export const downloadVideo = async (
   const directory = path.join(downloadsDir, taskId);
   await fs.mkdir(directory, { recursive: true });
   const args = [
-    ...commonArgs(),
+    ...commonArgs(url),
     '--no-simulate',
     '-o',
     path.join(directory, '%(title).150B.%(ext)s'),

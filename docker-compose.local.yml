@@ -5,6 +5,9 @@ services:
     restart: unless-stopped
     environment:
       CORS_ORIGIN: http://localhost:3000,https://neyvansantos.github.io
+      YT_DLP_COOKIES_FILE: ${YT_DLP_COOKIES_FILE:-}
+    volumes:
+      - ./.local:/app/local
   postgres:
     restart: unless-stopped
   redis:
