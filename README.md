@@ -76,6 +76,8 @@ Sobe a API em `http://localhost:3001/api`, PostgreSQL e Redis. O frontend contin
 Formatos: `video` e `audio`. Qualidades: `720p`, `1080p`, `4k`, `mp3`.
 Cada tarefa tem uma pasta própria. Áudio é convertido uma vez pelo yt-dlp. Arquivos prontos expiram uma hora após o processamento; a limpeza roda periodicamente. Tarefas interrompidas são marcadas como falhas na inicialização. Execute uma única instância da API: o limite de dois downloads e a recuperação de tarefas são locais ao processo.
 
+Vídeos são entregues em MP4 com vídeo H.264 de 8 bits (`yuv420p`) e áudio AAC, para compatibilidade com editores como o Premiere. Se a fonte já tiver esses codecs, as faixas são copiadas; AV1, VP9, Opus e outros formatos são convertidos antes da entrega. A conversão preserva a resolução escolhida disponível na fonte e pode aumentar o tempo de processamento. Arquivos sem áudio continuam sem áudio. O nome final recebe o sufixo ` - Premiere.mp4`.
+
 As URLs iniciais precisam resolver para endereços públicos. Essa verificação não substitui bloqueios de acesso à rede privada no ambiente de hospedagem, pois os extratores podem seguir outros endereços.
 
 ## Cloudflare opcional

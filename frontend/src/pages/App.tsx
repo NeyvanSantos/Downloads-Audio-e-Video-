@@ -171,7 +171,7 @@ const App: React.FC = () => {
           data.status === "pending"
             ? "Preparando o seu download..."
             : data.status === "converting"
-              ? "Convertendo o áudio para MP3..."
+              ? "Convertendo o arquivo para um formato compatível..."
               : "Processando seu arquivo. Isso pode levar alguns instantes.",
         );
         timer.current = setTimeout(() => void checkStatus(id, token), 2000);
@@ -365,7 +365,7 @@ const App: React.FC = () => {
                           {option === "video" ? "Vídeo" : "Só o áudio"}
                         </strong>
                         <small>
-                          {option === "video" ? "Imagem e som" : "Formato MP3"}
+                          {option === "video" ? "MP4 compatível" : "Formato MP3"}
                         </small>
                       </span>
                       <span className="radio-indicator">

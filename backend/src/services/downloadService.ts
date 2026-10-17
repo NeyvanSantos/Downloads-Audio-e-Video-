@@ -2,7 +2,13 @@ import 'dotenv/config';
 import pool from '../database/connection';
 import { DownloadRequest, DownloadStatus, VideoMetadata } from '../types';
 import { cacheMetadata, getCachedMetadata } from './cache';
-import { extractVideoInfo, downloadVideo, cleanupTask } from './mediaProcessor';
+import {
+  extractVideoInfo,
+  downloadVideo,
+  cleanupTask,
+  cleanupFile,
+} from './mediaProcessor';
+import { prepareEditingVideo } from './videoCompatibility';
 import { randomUUID } from 'crypto';
 import path from 'path';
 import { describeMediaError } from './mediaErrors';
@@ -46,12 +52,16 @@ const processDownload = async (
       'downloading',
       taskId,
     ]);
-    const filePath = await downloadVideo(
-      data.url,
-      data.format,
-      quality,
-      taskId,
-    );
+    let filePath = await downloadVideo(data.url, data.format, quality, taskId);
+    if (data.format === 'video') {
+      await pool.query('UPDATE downloads SET status = $1 WHERE id = $2', [
+        'converting',
+        taskId,
+      ]);
+      const originalPath = filePath;
+      filePath = await prepareEditingVideo(originalPath);
+      await cleanupFile(originalPath);
+    }
     await pool.query(
       "UPDATE downloads SET file_path = $1, file_name = $2, status = $3, expires_at = NOW() + INTERVAL '1 hour' WHERE id = $4",
       [filePath, path.basename(filePath), 'ready', taskId],
